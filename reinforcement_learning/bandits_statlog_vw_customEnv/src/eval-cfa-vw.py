@@ -5,10 +5,10 @@ from pathlib import Path
 import logging
 import numpy as np
 
-from vw_model import VWModel
+from src.vw_model import VWModel
 
-from io_utils import extract_model, CSVReader, validate_experience, download_manifest_data
-from vw_utils import EVAL_CHANNEL, MODEL_CHANNEL
+from src.io_utils import extract_model, CSVReader, validate_experience, download_manifest_data
+from src.vw_utils import EVAL_CHANNEL, MODEL_CHANNEL
 
 logging.basicConfig(level=logging.INFO)
 

@@ -6,17 +6,19 @@ import boto3
 import sagemaker
 from botocore.exceptions import ClientError
 from sagemaker.local.local_session import LocalSession
-from sagemaker.predictor import RealTimePredictor
+from sagemaker.predictor import Predictor
+from sagemaker.serializers import JSONLinesSerializer
 
-from orchestrator.exceptions.ddb_client_exceptions import RecordAlreadyExistsException
+from sagemaker_rl.orchestrator.exceptions.ddb_client_exceptions import RecordAlreadyExistsException
 
 from boto3.dynamodb.conditions import Key
 
-from orchestrator.clients.ddb.experiment_db_client import ExperimentDbClient
-from orchestrator.clients.ddb.join_db_client import JoinDbClient
-from orchestrator.clients.ddb.model_db_client import ModelDbClient
+from sagemaker_rl.orchestrator.clients.ddb.experiment_db_client import ExperimentDbClient
+from sagemaker_rl.orchestrator.clients.ddb.join_db_client import JoinDbClient
+from sagemaker_rl.orchestrator.clients.ddb.model_db_client import ModelDbClient
 
 logger = logging.getLogger(__name__)
+
 
 class ResourceManager(object):
     """A resource manager entity to manage computing resource creation
@@ -24,9 +26,9 @@ class ResourceManager(object):
     """
 
     def __init__(
-        self,
-        resource_config,
-        boto_session=None
+            self,
+            resource_config,
+            boto_session=None
     ):
         """Initialize a resource manager entity given a resource config
         
@@ -73,10 +75,10 @@ class ResourceManager(object):
         """
         if self._usable_shared_cf_stack_exists():
             logger.info("Using Resources in CloudFormation stack named: {} " \
-                "for Shared Resources.".format(self.shared_resource_stack_name))
+                        "for Shared Resources.".format(self.shared_resource_stack_name))
         else:
             logger.info("Creating a new CloudFormation stack for Shared Resources. " \
-                "You can always reuse this StackName in your other experiments")
+                        "You can always reuse this StackName in your other experiments")
             self._create_new_cloudformation_stack()
 
         # use Output Resources Names from CloudFromation stack
@@ -84,7 +86,7 @@ class ResourceManager(object):
         self.join_db_table_name = self._get_cf_output_by_key('JoinDbTableName')
         self.model_db_table_name = self._get_cf_output_by_key("ModelDbTableName")
         self.iam_role_arn = self._get_cf_output_by_key('IAMRoleArn')
-        
+
         # initialize DynamoDb clients!
         experiment_db_session = self.boto_session.resource('dynamodb').Table(self.exp_db_table_name)
         self.exp_db_client = ExperimentDbClient(experiment_db_session)
@@ -118,7 +120,7 @@ class ResourceManager(object):
                 return False
             else:
                 raise e
-    
+
         stack_details = response[0]
         stack_status = stack_details['StackStatus']
         if stack_status in ['UPDATE_COMPLETE', 'CREATE_COMPLETE']:
@@ -127,23 +129,23 @@ class ResourceManager(object):
             return False
         elif stack_status in ["ROLLBACK_COMPLETE"]:
             logger.error(f"Stack with name {stack_name} is in {stack_status} state! Please delete/ stabilize/ or "
-                        "or update Config.yaml to create a new stack")
+                         "or update Config.yaml to create a new stack")
             raise Exception(f"A Cloudformation Stack with name {stack_name}, already exists in {stack_status} State. "
                             f"Please debug/ or delete the stack here: {self._get_cf_stack_events_link()}"
-            )
+                            )
         elif "FAILED" in stack_status:
             logger.error(f"Stack with name {stack_name} in {stack_status} state! Please delete the stack"
                          " or update Config.yaml to create a new stack")
             raise Exception(f"A Cloudformation Stack with name {stack_name}, already exists in {stack_status} State. "
                             f"Please debug/ or delete the stack here: {self._get_cf_stack_events_link()}"
-            )
+                            )
         elif "DELETE" in stack_status:
             # already checked DELETE_COMPLETE above
             logger.error("Stack with name {} is in {} state! Cannot continue further!" \
-                " Please wait for the delete to complete".format(stack_name, stack_status))
+                         " Please wait for the delete to complete".format(stack_name, stack_status))
             raise Exception(f"A Cloudformation Stack with name {stack_name}, already exists in {stack_status} State. "
                             f"Please retry after the stack gets Deleted/or debug the stack here: {self._get_cf_stack_events_link()}"
-            )
+                            )
         elif "CREATE" in stack_status:
             # one of the create statuses!
             logger.info("Stack with name {} exists in {} state".format(stack_name, stack_status))
@@ -155,7 +157,6 @@ class ResourceManager(object):
             logger.info("Stack in {} state. Waiting for it's to end in successful state...".format(stack_status))
             self._wait_for_cf_stack_update_to_complete()
             return True
-
 
     def _create_new_cloudformation_stack(self):
         """Create a new cloudformation stack
@@ -194,10 +195,10 @@ class ResourceManager(object):
             elif "AlreadyExists" in str(e):
                 # it came here it means it must be in one for "CREATING states"
                 logger.warn(f"A stack with name {cf_stack_name} already exists. Reusing the stack" \
-                             " resources for this experiment")
+                            " resources for this experiment")
                 self._wait_for_cf_stack_create_to_complete()
                 return False
-            raise(e)
+            raise (e)
 
     def _get_cf_stack_events_link(self):
         """Get events link for the given shared cf stack
@@ -227,7 +228,7 @@ class ResourceManager(object):
             logger.error("Failed to Create Stack with name {} ".format(self.shared_resource_stack_name))
             raise Exception(f"Failed to Create Shared Resource Stack. "
                             f"Please debug the stack here: {self._get_cf_stack_events_link()}"
-            )
+                            )
 
     def _wait_for_cf_stack_update_to_complete(self):
         """Wait until the cf stack update complete
@@ -247,7 +248,7 @@ class ResourceManager(object):
             logger.error("Failed to use Stack with name {} ".format(self.shared_resource_stack_name))
             raise Exception(f"The provided CloudFormation Stack for Shared Resource is unstable. "
                             f"Please debug the stack here: {self._get_cf_stack_events_link()}"
-            )
+                            )
 
     def _parse_template(self):
         """Parse Yaml file for cloudformation
@@ -277,13 +278,13 @@ class ResourceManager(object):
                     "ParameterValue": self._get_resource_property(parameter_prefix, "table_name"),
                     "UsePreviousValue": True,
                     "ResolvedValue": "string"
-                }, 
+                },
                 {
                     "ParameterKey": parameter_prefix + "RCU",
                     "ParameterValue": self._get_resource_property(parameter_prefix, "rcu", '5'),
                     "UsePreviousValue": True,
                     "ResolvedValue": "string"
-                }, 
+                },
                 {
                     "ParameterKey": parameter_prefix + "WCU",
                     "ParameterValue": self._get_resource_property(parameter_prefix, "wcu", '5'),
@@ -327,7 +328,7 @@ class ResourceManager(object):
         """
         experiment_db_config = self._resource_config.get("shared_resource").get("experiment_db")
         return experiment_db_config.get(property_name, default_value)
-    
+
     def _get_model_db_property(self, property_name, default_value=None):
         """Return property value of model table
         Args:
@@ -340,7 +341,7 @@ class ResourceManager(object):
         model_db_config = self._resource_config.get("shared_resource").get("model_db")
         return model_db_config.get(property_name, default_value)
 
-    def _get_join_db_property(self, property_name,default_value=None):
+    def _get_join_db_property(self, property_name, default_value=None):
         """Return property value of join table
         Args:
             property_name (str): name of property
@@ -348,10 +349,10 @@ class ResourceManager(object):
         
         Returns:
             value of the property
-        """        
+        """
         join_db_config = self._resource_config.get("shared_resource").get("join_db")
         return join_db_config.get(property_name, default_value)
-    
+
     def _get_iam_role_property(self, property_name, default_value=None):
         """Return property value of iam role
         Args:
@@ -376,15 +377,15 @@ class ResourceManager(object):
         stack_json = self.cf_client.describe_stacks(
             StackName=self.shared_resource_stack_name
         )["Stacks"][0]
-    
+
         # validate stack has been successfully updater
         if stack_json["StackStatus"] not in \
-                ["CREATE_COMPLETE", "UPDATE_COMPLETE", 
-                "ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"]:
+                ["CREATE_COMPLETE", "UPDATE_COMPLETE",
+                 "ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"]:
             logger.error("Looks like Resource CF Stack is in {} state. " \
-                "Cannot continue forward. ".format(stack_json["StackStatus"]))
+                         "Cannot continue forward. ".format(stack_json["StackStatus"]))
             raise Exception("Please wait while the Shared Resources Stack gets into a usable state." \
-                "Currently in state {}!".format(stack_json["StackStatus"]))
+                            "Currently in state {}!".format(stack_json["StackStatus"]))
 
         stack_outputs = stack_json["Outputs"]
         for stack_output in stack_outputs:
@@ -490,7 +491,7 @@ class ResourceManager(object):
             error_code = e.response['Error']['Code']
             message = e.response['Error']['Message']
             raise RuntimeError(f"Failed to delete delivery stream '{stream_name}' "
-                                f"with error {error_code}: {message}")
+                               f"with error {error_code}: {message}")
 
     def _create_s3_bucket_if_not_exist(self, prefix):
         """Create s3 bucket if not exist
@@ -525,7 +526,7 @@ class ResourceManager(object):
             if error_code == "BucketAlreadyOwnedByYou":
                 pass
             elif (
-                error_code == "OperationAborted" and "conflicting conditional operation" in message
+                    error_code == "OperationAborted" and "conflicting conditional operation" in message
             ):
                 # If this bucket is already being concurrently created, we don't need to create it again.
                 pass
@@ -534,13 +535,14 @@ class ResourceManager(object):
                 s3.meta.client.head_bucket(Bucket=s3_bucket_name)
             else:
                 raise
-        
+
         s3_waiter = s3_client.get_waiter('bucket_exists')
         s3_waiter.wait(Bucket=s3_bucket_name)
         return s3_bucket_name
 
 
-class Predictor(object):
+class VMPredictor(Predictor):
+
     def __init__(self, endpoint_name, sagemaker_session=None):
         """
         Args:
@@ -549,10 +551,10 @@ class Predictor(object):
                 with the Amazon SageMaker APIs and any other AWS services needed.
         """
         self.endpoint_name = endpoint_name
-        self._realtime_predictor = RealTimePredictor(endpoint_name,
-                                                     serializer=sagemaker.predictor.json_serializer,
-                                                     deserializer=sagemaker.predictor.json_deserializer,
-                                                     sagemaker_session=sagemaker_session)
+        self._realtime_predictor = super(VMPredictor).__init__(endpoint_name,
+                                                               serializer=JSONLinesSerializer,
+                                                               deserializer=JSONLinesSerializer,
+                                                               sagemaker_session=sagemaker_session)
 
     def get_action(self, obs=None):
         """Get prediction from the endpoint

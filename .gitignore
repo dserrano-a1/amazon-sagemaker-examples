@@ -2,4 +2,5 @@
 **/.idea
 **/__pycache__
 **/.aws-sam
+ml-py-spark3
 .DS_Store

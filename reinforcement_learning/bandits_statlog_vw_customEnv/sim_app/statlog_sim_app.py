@@ -8,6 +8,7 @@ import json
 import io
 import numpy as np
 
+
 def remove_underrepresented_classes(features, labels, thresh=0.0005):
     """Removes classes when number of datapoints fraction is below a threshold."""
     total_count = labels.shape[0]
@@ -18,9 +19,11 @@ def remove_underrepresented_classes(features, labels, thresh=0.0005):
     keep = [vals_and_ratios[v] >= thresh for v in labels]
     return features[keep], labels[np.array(keep)]
 
+
 def safe_std(values):
     """Remove zero std values for ones."""
     return np.array([val if val != 0.0 else 1.0 for val in values])
+
 
 def classification_to_bandit_problem(contexts, labels, num_actions=None):
     """Normalize contexts and encode deterministic rewards."""

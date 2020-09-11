@@ -4,10 +4,10 @@ import os
 from pathlib import Path
 import logging
 
-from vw_model import VWModel
+from src.vw_model import VWModel
 
-from io_utils import extract_model, CSVReader, validate_experience
-from vw_utils import TRAIN_CHANNEL, MODEL_CHANNEL, MODEL_OUTPUT_PATH, save_vw_model, save_vw_metadata
+from src.io_utils import extract_model, CSVReader, validate_experience
+from src.vw_utils import TRAIN_CHANNEL, MODEL_CHANNEL, MODEL_OUTPUT_PATH, save_vw_model, save_vw_metadata
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 def main():
     """ Train a Vowpal Wabbit (VW) model through C++ process. """
-    
     channel_names = json.loads(os.environ['SM_CHANNELS'])
     hyperparameters = json.loads(os.environ['SM_HPS'])
     num_arms = int(hyperparameters.get("num_arms", 0))
